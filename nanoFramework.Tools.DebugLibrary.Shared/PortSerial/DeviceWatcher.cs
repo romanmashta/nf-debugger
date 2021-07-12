@@ -41,7 +41,12 @@ namespace nanoFramework.Tools.Debugger.PortSerial
 
                     while (_started)
                     {
-                        var ports = GetPortNames();
+                        //var serialPorts = GetSerialPortNames();
+                        var tcpIpPorts = GetTcpIpPorts();
+                        //var pipePorts = GetNamedPipesPorts();
+                        var ports = tcpIpPorts
+                            .ToList();
+
 
                         // process ports that have arrived
                         foreach (var port in ports)
@@ -53,7 +58,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                             }
                         }
 
-                        // check for ports that departed 
+                        // check for ports that departed
                         List<string> portsToRemove = new();
 
                         foreach (var port in _ports)
@@ -64,7 +69,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                             }
                         }
 
-                        // process ports that have departed 
+                        // process ports that have departed
                         foreach (var port in portsToRemove)
                         {
                             if (_ports.Contains(port))
@@ -86,7 +91,14 @@ namespace nanoFramework.Tools.Debugger.PortSerial
             }
         }
 
-        private List<string> GetPortNames()
+        private List<string> GetTcpIpPorts()
+        {
+            var ports = new [] {5900}; //Port range could be scanned to find active listening device. 
+
+            return ports.Select(port => $"{PortSerialManager.TcpIpPortType}{port}").ToList();
+        }
+
+        private List<string> GetSerialPortNames()
         {
             const string FindFullPathPattern = @"\\\\\?\\([\w]*)#([\w&]*)#([\w&]*)";
             const string RegExPattern = @"\\Device\\([a-zA-Z]*)(\d)";
@@ -123,7 +135,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                                         string portName = (string)allPorts.GetValue(port);
                                         if (portName != null)
                                         {
-                                            portNames.Add(portName);
+                                            portNames.Add($"{PortSerialManager.ComPortType}{portName}");
                                         }
                                     }
                                 }
@@ -151,8 +163,8 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                                                     activePorts = Registry.LocalMachine.OpenSubKey($"SYSTEM\\CurrentControlSet\\Services\\{service}\\Enum");
                                                     if (activePorts != null)
                                                     {
-                                                        // If the device is still plugged, it should appear as valid here, if not present, it means, the device has been disconnected                                                        
-                                                        portNames.Add(portName);
+                                                        // If the device is still plugged, it should appear as valid here, if not present, it means, the device has been disconnected
+                                                        portNames.Add($"{PortSerialManager.ComPortType}{portName}");
                                                     }
                                                 }
                                             }
@@ -166,7 +178,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
             }
             catch
             {
-                // Errors in enumeration can happen                
+                // Errors in enumeration can happen
             }
 
             return portNames;

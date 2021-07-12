@@ -7,6 +7,8 @@ namespace nanoFramework.Tools.Debugger
 {
     public interface INanoDevice
     {
+        public string DeviceId { get; set; }
+
         ConnectPortResult Connect();
 
         void Disconnect(bool force = false);

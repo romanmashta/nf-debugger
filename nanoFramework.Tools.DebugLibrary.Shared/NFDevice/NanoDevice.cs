@@ -78,6 +78,11 @@ namespace nanoFramework.Tools.Debugger
                 return ConnectionPort.ConnectDevice();
             }
 
+            if (Device is NanoTcpIpDevice)
+            {
+                return ConnectionPort.ConnectDevice();
+            }
+
             return ConnectPortResult.NotConnected;
         }
 

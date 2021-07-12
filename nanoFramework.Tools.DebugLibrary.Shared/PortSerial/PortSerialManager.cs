@@ -22,6 +22,9 @@ namespace nanoFramework.Tools.Debugger.PortSerial
 {
     public partial class PortSerialManager : PortBase
     {
+        public const string ComPortType = "com://";
+        public const string TcpIpPortType = "tcp://";
+
         private readonly DeviceWatcher _deviceWatcher = new();
 
         // Serial device watchers started flag
@@ -177,7 +180,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
         /// </summary>
         /// <param name="deviceInformation">DeviceInformation on the device to be added to the list</param>
         /// <param name="deviceId">The AQS used to find this device</param>
-        private void AddDeviceToListAsync(String deviceId)
+        private void AddDeviceToListAsync<T>(String deviceId, TransportType transportType, Func<NanoDevice<T>, IPort> createPortFunc) where T : new()
         {
             // search the device list for a device with a matching interface ID
             var serialMatch = FindDevice(deviceId);
@@ -195,10 +198,10 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                 if (nanoFrameworkDeviceMatch == null)
                 {
                     // Create a new element for this device and...
-                    var newNanoFrameworkDevice = new NanoDevice<NanoSerialDevice>();
+                    var newNanoFrameworkDevice = new NanoDevice<T>();
                     newNanoFrameworkDevice.DeviceId = deviceId;
-                    newNanoFrameworkDevice.ConnectionPort = new PortSerial(this, newNanoFrameworkDevice);
-                    newNanoFrameworkDevice.Transport = TransportType.Serial;
+                    newNanoFrameworkDevice.ConnectionPort = createPortFunc(newNanoFrameworkDevice);
+                    newNanoFrameworkDevice.Transport = transportType;
 
                     var connectResult = newNanoFrameworkDevice.ConnectionPort.ConnectDevice();
 
@@ -222,7 +225,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                             // disconnect
                             newNanoFrameworkDevice.Disconnect();
 
-                            // devices powered by the USB cable and that feature a serial converter (like an FTDI chip) 
+                            // devices powered by the USB cable and that feature a serial converter (like an FTDI chip)
                             // are still booting when the USB enumeration event raises
                             // so need to give them enough time for the boot sequence to complete before trying to communicate with them
 
@@ -289,13 +292,13 @@ namespace nanoFramework.Tools.Debugger.PortSerial
 
         public override void DisposeDevice(string instanceId)
         {
-            var deviceToDispose = NanoFrameworkDevices.FirstOrDefault(nanoDevice => ((NanoDevice<NanoSerialDevice>)nanoDevice).DeviceId == instanceId);
+            var deviceToDispose = NanoFrameworkDevices.FirstOrDefault(nanoDevice => ((INanoDevice)nanoDevice).DeviceId == instanceId);
 
             if (deviceToDispose != null)
             {
                 Task.Run(() =>
                 {
-                    ((NanoDevice<NanoSerialDevice>)deviceToDispose).Dispose();
+                    ((IDisposable)deviceToDispose).Dispose();
                 });
             }
         }
@@ -358,7 +361,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
         }
 
         /// <summary>
-        /// Remove the device from the device list 
+        /// Remove the device from the device list
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="deviceInformationUpdate"></param>
@@ -384,9 +387,9 @@ namespace nanoFramework.Tools.Debugger.PortSerial
 
             // discard known system and other rogue devices
             RegistryKey portKeyInfo = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\COM Name Arbiter\Devices");
-            if (portKeyInfo != null)
+            if (portKeyInfo != null && serialPort.StartsWith(ComPortType))
             {
-                var portInfo = (string)portKeyInfo.GetValue(serialPort);
+                var portInfo = (string)portKeyInfo.GetValue(serialPort.Substring(ComPortType.Length));
 
                 if (portInfo != null)
                 {
@@ -412,7 +415,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                        // this seems to cover virtual COM ports from Bluetooth devices
                        portInfo.Contains("BTHENUM") ||
 
-                       // this seems to cover virtual COM ports by ELTIMA 
+                       // this seems to cover virtual COM ports by ELTIMA
                        portInfo.Contains("EVSERIAL")
                        )
                     {
@@ -430,14 +433,18 @@ namespace nanoFramework.Tools.Debugger.PortSerial
 
             Task.Run(() =>
             {
-                AddDeviceToListAsync(serialPort);
+                if(serialPort.StartsWith(ComPortType))
+                    AddDeviceToListAsync<NanoSerialDevice>(serialPort, TransportType.Serial, frameworkDevice => new PortSerial(this, frameworkDevice));
+
+                if(serialPort.StartsWith(TcpIpPortType))
+                    AddDeviceToListAsync<NanoSerialDevice>(serialPort, TransportType.TcpIp, frameworkDevice => new TcpIpPort(this, frameworkDevice));
             });
         }
 
         #endregion
 
 
-        #region Handlers and events for Device Enumeration Complete 
+        #region Handlers and events for Device Enumeration Complete
 
         private void ProcessDeviceEnumerationComplete()
         {
@@ -446,13 +453,13 @@ namespace nanoFramework.Tools.Debugger.PortSerial
             // all watchers have completed enumeration
             IsDevicesEnumerationComplete = true;
 
-            // fire event that Serial enumeration is complete 
+            // fire event that Serial enumeration is complete
             OnDeviceEnumerationCompleted();
         }
 
-        private bool CheckValidNanoFrameworkSerialDevice(
-            NanoDevice<NanoSerialDevice> device, 
-            bool longDelay = false)
+        private bool CheckValidNanoFrameworkSerialDevice<T>(
+            NanoDevice<T> device,
+            bool longDelay = false) where T : new()
         {
             bool validDevice = false;
             bool isKnownDevice = false;
@@ -463,7 +470,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
             try
             {
                 // sanity check for invalid or null device base
-                if ((SerialPort)device.DeviceBase != null)
+                if (device.Transport == TransportType.Serial && (SerialPort)device.DeviceBase != null)
                 {
                     // check if this device is on cache
                     isKnownDevice = _devicesCache.TryGetValue(deviceId, out var cachedDevice);
@@ -576,14 +583,116 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                     }
                 }
 
+                if (device.Transport == TransportType.TcpIp)
+                {
+                    // check if this device is on cache
+                    isKnownDevice = _devicesCache.TryGetValue(deviceId, out var cachedDevice);
+
+                    // need to go through all the valid baud rates: 921600, 460800 and 115200.
+                    if (device.DebugEngine == null)
+                    {
+                        device.CreateDebugEngine();
+                    }
+
+                    OnLogMessageAvailable(NanoDevicesEventSource.Log.CheckingValidDevice($" {deviceId}"));
+
+                    // try to "just" connect to the device meaning...
+                    // ... don't request capabilities or force anything except the absolute minimum required, plus...
+                    // ... it's OK to use a very short timeout as we'll be exchanging really short packets with the device
+                    if (device.DebugEngine.Connect(
+                        longDelay ? 2 * NanoSerialDevice.SafeDefaultTimeout : NanoSerialDevice.SafeDefaultTimeout))
+                    {
+                        if (isKnownDevice)
+                        {
+                            // skip getting properties from device
+                            device.TargetName = cachedDevice.TargetName;
+                            device.Platform = cachedDevice.PlatformName;
+
+                            validDevice = true;
+                        }
+
+                        // set retry policies
+                        var targetInfoPropertiesPolicy = Policy.Handle<NullReferenceException>()
+                            .OrResult<CLRCapabilities.TargetInfoProperties>(r => r.TargetName == null)
+                            .WaitAndRetry(2, retryAttempt => TimeSpan.FromMilliseconds((retryAttempt + 1) * 200));
+                        var targetInfoPolicy = Policy.Handle<NullReferenceException>()
+                            .OrResult<TargetInfo>(r => r.TargetName == null)
+                            .WaitAndRetry(2, retryAttempt => TimeSpan.FromMilliseconds((retryAttempt + 1) * 200));
+                        var targetReleaseInfoPolicy = Policy.Handle<NullReferenceException>()
+                            .OrResult<ReleaseInfo>(r => r == null)
+                            .WaitAndRetry(2, retryAttempt => TimeSpan.FromMilliseconds((retryAttempt + 1) * 200));
+
+                        if (device.DebugEngine.IsConnectedTonanoBooter)
+                        {
+                            // try first with new command
+                            var targetInfo = targetInfoPolicy.Execute(() => device.DebugEngine.GetMonitorTargetInfo());
+
+                            if (targetInfo != null)
+                            {
+                                device.TargetName = targetInfo.TargetName;
+                                device.Platform = targetInfo.PlatformName;
+                            }
+                            else
+                            {
+                                // try again with deprecated command
+                                var deviceInfo =
+                                    targetReleaseInfoPolicy.Execute(() => device.DebugEngine.GetMonitorOemInfo());
+
+                                if (deviceInfo != null)
+                                {
+                                    device.TargetName = deviceInfo.TargetName;
+                                    device.Platform = deviceInfo.PlatformName;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var deviceInfo = targetInfoPropertiesPolicy.Execute(() =>
+                            {
+                                if (device.DebugEngine != null)
+                                {
+                                    return device.DebugEngine.GetTargetInfo();
+                                }
+                                else
+                                {
+                                    return new CLRCapabilities.TargetInfoProperties();
+                                }
+                            });
+
+                            if (!string.IsNullOrEmpty(deviceInfo.TargetName))
+                            {
+                                device.TargetName = deviceInfo.TargetName;
+                                device.Platform = deviceInfo.Platform;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(device.TargetName)
+                            || string.IsNullOrEmpty(device.Platform))
+                        {
+                            OnLogMessageAvailable(
+                                NanoDevicesEventSource.Log.CriticalError(
+                                    $"ERROR: {device.DeviceId} failed to get target information"));
+
+                            validDevice = false;
+                        }
+                        else
+                        {
+                            validDevice = true;
+                        }
+                    }
+                }
+
                 if (validDevice)
                 {
                     // there should be a valid nanoFramework device at the other end
 
-                    device.SerialNumber = GetSerialNumber(deviceId);
+                    device.SerialNumber = device.Transport == TransportType.Serial ? GetSerialNumber(deviceId) : deviceId;
 
                     // store valid baud rate from device detection
-                    ((PortSerial)device.ConnectionPort).BaudRate = ((SerialPort)device.DeviceBase).BaudRate;
+                    if (device.Transport == TransportType.Serial)
+                    {
+                        ((PortSerial) device.ConnectionPort).BaudRate = ((SerialPort) device.DeviceBase).BaudRate;
+                    }
 
                     // store connection ID
                     device.ConnectionId = deviceId;
@@ -592,7 +701,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
                     var cachedDevice = new CachedDeviceInfo(
                         device.TargetName,
                         device.Platform,
-                        ((SerialPort)device.DeviceBase).BaudRate);
+                        device.Transport == TransportType.Serial ? ((SerialPort)device.DeviceBase).BaudRate : 0);
 
                     _devicesCache.TryAdd(
                         deviceId,

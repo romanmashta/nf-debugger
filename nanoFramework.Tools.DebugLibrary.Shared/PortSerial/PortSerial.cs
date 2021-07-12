@@ -59,7 +59,7 @@ namespace nanoFramework.Tools.Debugger.PortSerial
         ///
         /// It is important that the FromIdAsync call is made on the UI thread because the consent prompt can only be displayed
         /// on the UI thread.
-        /// 
+        ///
         /// This method is used to reopen the device after the device reconnects to the computer and when the app resumes.
         /// </summary>
         /// <returns>True if the device was successfully opened, false if the device could not be opened for well known reasons.
@@ -72,12 +72,12 @@ namespace nanoFramework.Tools.Debugger.PortSerial
             try
             {
                 /////////////////////////////////////////////////////////////
-                // need to FORCE the parity setting to _NONE_ because        
-                // the default on the current ST Link is different causing 
+                // need to FORCE the parity setting to _NONE_ because
+                // the default on the current ST Link is different causing
                 // the communication to fail
                 /////////////////////////////////////////////////////////////
 
-                NanoDevice.DeviceBase = new SerialPort(InstanceId, BaudRate, Parity.None, 8);
+                NanoDevice.DeviceBase = new SerialPort(InstanceId.Substring(PortSerialManager.ComPortType.Length), BaudRate, Parity.None, 8);
 
                 // Device could have been blocked by user or the device has already been opened by another app.
                 if (Device != null)
@@ -291,6 +291,5 @@ namespace nanoFramework.Tools.Debugger.PortSerial
         }
 
         #endregion
-
     }
 }

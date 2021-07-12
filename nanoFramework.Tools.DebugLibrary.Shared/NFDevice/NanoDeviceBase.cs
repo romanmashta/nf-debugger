@@ -23,7 +23,7 @@ namespace nanoFramework.Tools.Debugger
         /// <summary>
         /// nanoFramework debug engine.
         /// </summary>
-        /// 
+        ///
         public Engine DebugEngine { get; set; }
 
         /// <summary>
@@ -33,7 +33,7 @@ namespace nanoFramework.Tools.Debugger
         {
             DebugEngine = new Engine(this);
 
-            if (Transport == TransportType.Serial)
+            if (Transport == TransportType.Serial || Transport == TransportType.TcpIp)
             {
                 DebugEngine.DefaultTimeout = NanoSerialDevice.SafeDefaultTimeout;
             }
@@ -54,7 +54,7 @@ namespace nanoFramework.Tools.Debugger
         }
 
         /// <summary>
-        /// Transport to the device. 
+        /// Transport to the device.
         /// </summary>
         public TransportType Transport { get; set; }
 
@@ -390,7 +390,7 @@ namespace nanoFramework.Tools.Debugger
                     return false;
                 }
 
-                // flag request to launch nanoBooter 
+                // flag request to launch nanoBooter
                 requestBooter = true;
             }
 
@@ -405,7 +405,7 @@ namespace nanoFramework.Tools.Debugger
             {
                 log?.Report("Getting connection source...");
 
-                DebugEngine.GetConnectionSource();               
+                DebugEngine.GetConnectionSource();
             }
 
             long total = 0;
@@ -420,7 +420,7 @@ namespace nanoFramework.Tools.Debugger
 
                     return false;
                 }
-                
+
                 if(!deviceState.IsDeviceInStoppedState())
                 {
                     log?.Report("Connected to CLR. Pausing execution...");
@@ -569,7 +569,7 @@ namespace nanoFramework.Tools.Debugger
         //}
 
         /// <summary>
-        /// Attempts to deploy a binary (.bin) file to the connected nanoFramework device. 
+        /// Attempts to deploy a binary (.bin) file to the connected nanoFramework device.
         /// </summary>
         /// <param name="binFile">Path to the binary file (.bin).</param>
         /// <param name="address">Address to write to.</param>
@@ -596,7 +596,7 @@ namespace nanoFramework.Tools.Debugger
             {
                 return false;
             }
-            
+
             var data = File.ReadAllBytes(binFile);
 
             if (!PrepareForDeploy(
@@ -629,7 +629,7 @@ namespace nanoFramework.Tools.Debugger
         }
 
         /// <summary>
-        /// Attempts to deploy an SREC (.hex) file to the connected nanoFramework device. 
+        /// Attempts to deploy an SREC (.hex) file to the connected nanoFramework device.
         /// </summary>
         /// <param name="srecFile">Path to the SREC file (.hex) file.</param>
         /// <returns>Returns <see langword="false"/> if the deployment fails, <see langword="true"/> otherwise.
@@ -675,7 +675,7 @@ namespace nanoFramework.Tools.Debugger
                 {
                     uint addr = block.address;
 
-                    // check if cancellation was requested 
+                    // check if cancellation was requested
                     if (cancellationToken.IsCancellationRequested)
                     {
                         return false;
@@ -1019,7 +1019,7 @@ namespace nanoFramework.Tools.Debugger
         //            srecExtFile = await folder.TryGetItemAsync(srecFile.Name.Replace(srecFile.FileType, "") + ".ext") as StorageFile;
         //        }
 
-        //        // check if cancellation was requested 
+        //        // check if cancellation was requested
         //        if (cancellationToken.IsCancellationRequested)
         //        {
         //            new Tuple<uint, bool>(0, false);
@@ -1040,7 +1040,7 @@ namespace nanoFramework.Tools.Debugger
 
         //            while (parsedFile.Records.Count > 0)
         //            {
-        //                // check if cancellation was requested 
+        //                // check if cancellation was requested
         //                if (cancellationToken.IsCancellationRequested)
         //                {
         //                    new Tuple<uint, bool>(0, false);
@@ -1061,7 +1061,7 @@ namespace nanoFramework.Tools.Debugger
 
         //                foreach (uint key in keys)
         //                {
-        //                    // check if cancellation was requested 
+        //                    // check if cancellation was requested
         //                    if (cancellationToken.IsCancellationRequested)
         //                    {
         //                        new Tuple<uint, bool>(0, false);
@@ -1128,7 +1128,7 @@ namespace nanoFramework.Tools.Debugger
 
         //                StorageFile symdefFile = await folder.TryGetItemAsync(symdefFilePath) as StorageFile;
 
-        //                // check if cancellation was requested 
+        //                // check if cancellation was requested
         //                if (cancellationToken.IsCancellationRequested)
         //                {
         //                    new Tuple<uint, bool>(0, false);
@@ -1146,7 +1146,7 @@ namespace nanoFramework.Tools.Debugger
 
         //                    foreach (string line in textLines)
         //                    {
-        //                        // check if cancellation was requested 
+        //                        // check if cancellation was requested
         //                        if (cancellationToken.IsCancellationRequested)
         //                        {
         //                            new Tuple<uint, bool>(0, false);
@@ -1346,7 +1346,7 @@ namespace nanoFramework.Tools.Debugger
 
         private bool PrepareForDeploy(
             uint address,
-            List<SRecordFile.Block> blocks, 
+            List<SRecordFile.Block> blocks,
             IProgress<string> progress = null)
         {
             // get flash sector map, only if needed
@@ -1433,7 +1433,7 @@ namespace nanoFramework.Tools.Debugger
             if (updatesDeployment)
             {
                 if (!Erase(
-                    EraseOptions.Deployment, 
+                    EraseOptions.Deployment,
                     null,
                     progress))
                 {
